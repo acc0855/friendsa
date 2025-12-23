@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Night With Friends - Watch Together</title>
+    <title>Night With Friends • Watch Together</title>
     <script src="https://www.youtube.com/iframe_api"></script>
     <style>
         body {
             margin: 0;
             font-family: 'Segoe UI', Arial, sans-serif;
-            background: #121212;
+            background: #0f0f0f;
             color: #fff;
+            height: 100vh;
+            overflow: hidden;
         }
         .container {
             display: flex;
@@ -23,72 +25,92 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            position: relative;
         }
         #player, video {
             width: 100%;
             height: 100%;
         }
         .controls {
-            padding: 20px;
-            background: #1e1e1e;
+            padding: 16px;
+            background: #1a1a1a;
             text-align: center;
+            border-top: 1px solid #333;
         }
         #adminControls {
             display: none;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
         input[type="text"], input[type="number"] {
-            width: 300px;
+            width: 320px;
             max-width: 80%;
-            padding: 12px;
+            padding: 12px 16px;
             font-size: 16px;
-            border: none;
-            border-radius: 8px;
-            margin: 8px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 12px;
+            color: white;
+            margin: 8px 4px;
         }
         button {
-            padding: 12px 24px;
+            padding: 12px 28px;
             font-size: 16px;
             background: #ff0050;
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 12px;
             cursor: pointer;
-            margin: 5px;
+            margin: 6px;
+            font-weight: bold;
         }
         button:hover {
-            background: #d00044;
+            background: #e00045;
+        }
+        button:active {
+            background: #c0003a;
+        }
+        #playPauseBtn {
+            width: 140px;
+            font-size: 18px;
         }
         #statusText {
-            margin-top: 10px;
+            margin: 10px 0 0;
             font-size: 14px;
             color: #aaa;
         }
+        .error {
+            color: #ff4444;
+        }
+        .success {
+            color: #44ff88;
+        }
         .loading {
-            color: #aaa;
+            color: #888;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Video display area -->
         <div class="video-frame" id="videoFrame">
             <p class="loading">Connecting to room...</p>
         </div>
 
-        <!-- Controls (only visible after joining) -->
-        <div class="controls" id="controlsSection">
-            <!-- Admin-only controls -->
+        <div class="controls" id="controlsSection" style="display:none;">
             <div id="adminControls">
-                <input type="text" id="videoLink" placeholder="Paste YouTube or direct video link (mp4/webm)">
-                <button onclick="setVideoUrl()">Set Video</button>
-                <br>
-                <button id="playPauseBtn" onclick="togglePlayPause()" style="width:120px;">Play</button>
-                <input type="number" id="seekInput" placeholder="Seek to seconds" min="0">
-                <button onclick="seekVideo()">Seek</button>
+                <div>
+                    <input type="text" id="videoLink" placeholder="Paste YouTube or direct video link (.mp4/.webm)">
+                </div>
+                <div>
+                    <button onclick="setVideoUrl()">Set Video</button>
+                </div>
+                <div style="margin-top:12px;">
+                    <button id="playPauseBtn" onclick="togglePlayPause()">Play</button>
+                    <input type="number" id="seekInput" placeholder="Seek to (seconds)" min="0">
+                    <button onclick="seekVideo()">Seek</button>
+                </div>
             </div>
             <div id="userInfo">
-                <p id="statusText">Loading room...</p>
+                <p id="statusText" class="loading">Initializing...</p>
             </div>
         </div>
     </div>
@@ -111,8 +133,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Global variables
-        let username = '';
+        let username = 'Guest';
         let roomId = '';
         let isAdmin = false;
         let player = null;
@@ -124,55 +145,55 @@
         let videoStatusRef = null;
         let roomRef = null;
 
-        // Read URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        roomId = urlParams.get('room');
-        username = urlParams.get('user') || 'Guest';
+        // Read room and user from URL
+        const params = new URLSearchParams(window.location.search);
+        roomId = params.get('room');
+        username = params.get('user') || 'Guest';
 
         if (!roomId) {
-            document.getElementById("videoFrame").innerHTML = `
-                <p style="color:#ff0050;">Error: No room ID provided.<br>
-                Open this link from your app after creating a party.</p>`;
-            document.getElementById("statusText").textContent = "Invalid link";
+            document.getElementById('videoFrame').innerHTML = 
+                `<p style="color:#ff4444;">Invalid link: No room ID found.<br>Use the app to create or join a party.</p>`;
+            document.getElementById('statusText').textContent = "Error: Missing room";
             throw new Error("No room ID");
         }
 
-        // Auto-join the room
-        document.getElementById("statusText").textContent = `Joining room as ${username}...`;
+        document.getElementById('statusText').textContent = `Connecting as ${username}...`;
 
+        // Firebase references
         roomRef = ref(db, 'rooms/' + roomId);
         videoUrlRef = ref(db, 'rooms/' + roomId + '/videoUrl');
         videoStatusRef = ref(db, 'rooms/' + roomId + '/videoStatus');
 
-        // Check if room exists and determine admin status
+        // Check room and admin status
         onValue(roomRef, (snap) => {
             const data = snap.val();
             if (!data) {
-                document.getElementById("videoFrame").innerHTML = "<p style='color:#ff0050;'>Room not found or deleted.</p>";
-                document.getElementById("statusText").textContent = "Room not found";
+                document.getElementById('videoFrame').innerHTML = 
+                    `<p style="color:#ff4444;">Room not found or deleted.</p>`;
+                document.getElementById('statusText').textContent = "Room not found";
                 return;
             }
-
             isAdmin = data.admin === username;
-            document.getElementById("adminControls").style.display = isAdmin ? 'block' : 'none';
-            document.getElementById("statusText").textContent = isAdmin 
-                ? "You are the host • Full control enabled" 
-                : `Watching with ${username}`;
+            document.getElementById('adminControls').style.display = isAdmin ? 'block' : 'none';
+            document.getElementById('statusText').innerHTML = isAdmin 
+                ? '<span class="success">You are the host • Full control</span>'
+                : `Watching as <strong>${username}</strong>`;
+            document.getElementById('controlsSection').style.display = 'block';
         }, { onlyOnce: true });
 
-        // Listen for video URL
+        // Listen to video URL changes
         onValue(videoUrlRef, (snap) => {
             const url = snap.val() || '';
             loadVideo(url);
         });
 
-        // Listen for playback status
+        // Listen to playback status
         onValue(videoStatusRef, (snap) => {
             const status = snap.val();
             if (!status) return;
 
-            const currentTime = getCurrentTime();
-            if (Math.abs(currentTime - status.currentPosition) > 2) {
+            const currTime = getCurrentTime();
+            if (Math.abs(currTime - status.currentPosition) > 2) {
                 seekTo(status.currentPosition);
             }
 
@@ -183,71 +204,47 @@
             }
         });
 
-        // Add user to room (for presence)
-        const userPresenceRef = ref(db, `rooms/${roomId}/users/${username}`);
-        set(userPresenceRef, true);
-        onDisconnect(userPresenceRef).remove();
+        // Register user presence
+        const presenceRef = ref(db, `rooms/${roomId}/users/${username}`);
+        set(presenceRef, true);
+        onDisconnect(presenceRef).remove();
+        runTransaction(ref(db, `rooms/${roomId}/userCount`), (count) => (count || 0) + 1);
+        onDisconnect(ref(db, `rooms/${roomId}/userCount`)).runTransaction((count) => (count || 1) - 1);
 
-        // Update user count
-        runTransaction(ref(db, `rooms/${roomId}/userCount`), (current) => (current || 0) + 1);
-        onDisconnect(ref(db, `rooms/${roomId}/userCount`)).runTransaction((current) => (current || 1) - 1);
-
-        // Show controls
-        document.getElementById("controlsSection").style.display = 'block';
-
-        // Video handling functions
-        function isYouTubeUrl(url) {
-            return /youtube\.com|youtu\.be/.test(url);
-        }
-
-        function isDirectVideoUrl(url) {
-            return /\.(mp4|webm)$/.test(url);
-        }
-
-        function getYouTubeId(url) {
-            if (url.includes("youtu.be")) return url.split("youtu.be/")[1].split("?")[0];
-            return new URL(url).searchParams.get("v");
-        }
-
+        // Video functions
         function loadVideo(url) {
             if (url === currentVideoUrl) return;
             currentVideoUrl = url;
-
-            const frame = document.getElementById("videoFrame");
-            frame.innerHTML = "";
+            const frame = document.getElementById('videoFrame');
+            frame.innerHTML = '';
             stopUpdateTimer();
-            player = null;
-            videoElement = null;
 
             if (!url) {
-                frame.innerHTML = "<p style='color:white;'>No video selected yet</p>";
+                frame.innerHTML = '<p style="color:#aaa;">No video selected yet</p>';
                 return;
             }
 
-            if (isYouTubeUrl(url)) {
+            if (/youtube\.com|youtu\.be/.test(url)) {
                 videoType = 'youtube';
-                const div = document.createElement("div");
-                div.id = "player";
+                const div = document.createElement('div');
+                div.id = 'player';
                 frame.appendChild(div);
-                player = new YT.Player("player", {
-                    videoId: getYouTubeId(url),
-                    playerVars: { controls: 1, autoplay: 0 },
-                    events: { 'onReady': onPlayerReady }
+                player = new YT.Player('player', {
+                    videoId: url.includes('youtu.be') ? url.split('youtu.be/')[1].split('?')[0] : new URL(url).searchParams.get('v'),
+                    playerVars: { controls: 1, autoplay: 0, rel: 0 },
+                    events: { onReady: () => {} }
                 });
-            } else if (isDirectVideoUrl(url)) {
+            } else if (/\.(mp4|webm)$/i.test(url)) {
                 videoType = 'direct';
-                videoElement = document.createElement("video");
+                videoElement = document.createElement('video');
                 videoElement.src = url;
                 videoElement.controls = true;
+                videoElement.style.width = '100%';
+                videoElement.style.height = '100%';
                 frame.appendChild(videoElement);
-                videoElement.addEventListener('loadedmetadata', onPlayerReady);
             } else {
-                frame.innerHTML = "<p style='color:white;'>Unsupported link format</p>";
+                frame.innerHTML = '<p style="color:#ff4444;">Unsupported video format</p>';
             }
-        }
-
-        function onPlayerReady() {
-            // Ready for sync
         }
 
         function playVideoPlayer() {
@@ -262,15 +259,9 @@
             document.getElementById('playPauseBtn').textContent = 'Play';
         }
 
-        function isPlayerPlaying() {
-            if (videoType === 'youtube' && player) return player.getPlayerState() === 1;
-            if (videoType === 'direct' && videoElement) return !videoElement.paused;
-            return false;
-        }
-
         function getCurrentTime() {
-            if (videoType === 'youtube' && player) return player.getCurrentTime();
-            if (videoType === 'direct' && videoElement) return videoElement.currentTime;
+            if (videoType === 'youtube' && player) return player.getCurrentTime() || 0;
+            if (videoType === 'direct' && videoElement) return videoElement.currentTime || 0;
             return 0;
         }
 
@@ -283,7 +274,7 @@
             stopUpdateTimer();
             updateTimer = setInterval(() => {
                 if (isAdmin) {
-                    set(videoStatusRef.child('currentPosition'), Math.floor(getCurrentTime()));
+                    set(ref(db, `rooms/${roomId}/videoStatus/currentPosition`), Math.floor(getCurrentTime()));
                 }
             }, 2000);
         }
@@ -292,43 +283,49 @@
             if (updateTimer) clearInterval(updateTimer);
         }
 
-        // Admin controls
+        // Admin Controls
         window.setVideoUrl = function() {
             if (!isAdmin) return;
-            const link = document.getElementById("videoLink").value.trim();
-            if (link) {
-                set(videoUrlRef, link);
-                set(videoStatusRef, { isPlaying: false, currentPosition: 0 });
-            }
-        }
+            const link = document.getElementById('videoLink').value.trim();
+            if (!link) return;
+
+            document.getElementById('statusText').textContent = 'Saving video...';
+            document.getElementById('statusText').className = 'loading';
+
+            set(videoUrlRef, link)
+                .then(() => {
+                    set(videoStatusRef, { isPlaying: false, currentPosition: 0 });
+                    document.getElementById('statusText').innerHTML = '<span class="success">Video set successfully!</span>';
+                    document.getElementById('videoLink').value = '';
+                })
+                .catch((err) => {
+                    console.error(err);
+                    document.getElementById('statusText').innerHTML = `<span class="error">Failed: ${err.message}</span>`;
+                });
+        };
 
         window.togglePlayPause = function() {
             if (!isAdmin) return;
-            if (isPlayerPlaying()) {
-                pauseVideoPlayer();
-                set(videoStatusRef.child('isPlaying'), false);
-                updatePosition();
-                stopUpdateTimer();
-            } else {
+            const playing = document.getElementById('playPauseBtn').textContent === 'Play';
+            if (playing) {
                 playVideoPlayer();
-                set(videoStatusRef.child('isPlaying'), true);
+                set(ref(db, `rooms/${roomId}/videoStatus/isPlaying`), true);
                 startUpdateTimer();
+            } else {
+                pauseVideoPlayer();
+                set(ref(db, `rooms/${roomId}/videoStatus/isPlaying`), false);
+                stopUpdateTimer();
             }
-        }
-
-        function updatePosition() {
-            set(videoStatusRef.child('currentPosition'), Math.floor(getCurrentTime()));
-        }
+        };
 
         window.seekVideo = function() {
             if (!isAdmin) return;
-            const time = parseFloat(document.getElementById("seekInput").value);
-            if (!isNaN(time) && time >= 0) {
-                seekTo(time);
-                updatePosition();
-                document.getElementById("seekInput").value = '';
-            }
-        }
+            const time = parseFloat(document.getElementById('seekInput').value);
+            if (isNaN(time) || time < 0) return;
+            seekTo(time);
+            set(ref(db, `rooms/${roomId}/videoStatus/currentPosition`), Math.floor(time));
+            document.getElementById('seekInput').value = '';
+        };
     </script>
 </body>
 </html>
