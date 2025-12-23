@@ -2,363 +2,333 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Video Player Website</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Night With Friends - Watch Together</title>
     <script src="https://www.youtube.com/iframe_api"></script>
     <style>
         body {
             margin: 0;
-            font-family: Arial, sans-serif;
-            background: #f4f4f4;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #121212;
+            color: #fff;
         }
-
-        /* Top video frame */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
         .video-frame {
-            width: 100%;
-            height: 400px;
+            flex: 1;
             background: #000;
             display: flex;
             justify-content: center;
             align-items: center;
         }
-
         #player, video {
-            width: 90%;
+            width: 100%;
             height: 100%;
         }
-
-        /* Join section */
-        .join {
-            padding: 20px;
-            background: #fff;
-            text-align: center;
-        }
-
-        /* Controls section */
         .controls {
             padding: 20px;
-            background: #fff;
+            background: #1e1e1e;
             text-align: center;
-            display: none; /* Hidden initially */
         }
-
-        input {
-            width: 200px;
-            padding: 10px;
+        #adminControls {
+            display: none;
+            margin-bottom: 15px;
+        }
+        input[type="text"], input[type="number"] {
+            width: 300px;
+            max-width: 80%;
+            padding: 12px;
             font-size: 16px;
-            margin: 5px;
+            border: none;
+            border-radius: 8px;
+            margin: 8px;
         }
-
         button {
-            padding: 10px 20px;
+            padding: 12px 24px;
             font-size: 16px;
-            margin: 5px;
+            background: #ff0050;
+            color: white;
+            border: none;
+            border-radius: 8px;
             cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #d00044;
+        }
+        #statusText {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .loading {
+            color: #aaa;
         }
     </style>
 </head>
 <body>
-<!-- Join room area -->
-<div class="join" id="joinSection">
-    <input type="text" id="username" placeholder="Enter your username">
-    <input type="text" id="roomId" placeholder="Enter room ID">
-    <button onclick="joinRoom()">Join Room</button>
-</div>
+    <div class="container">
+        <!-- Video display area -->
+        <div class="video-frame" id="videoFrame">
+            <p class="loading">Connecting to room...</p>
+        </div>
 
-<!-- Video display area -->
-<div class="video-frame" id="videoFrame">
-    <p style="color:white;">Waiting to join a room...</p>
-</div>
-
-<!-- Input controls -->
-<div class="controls" id="controlsSection">
-    <div id="adminControls" style="display: none;">
-        <input type="text" id="videoLink" placeholder="Paste YouTube or video link here">
-        <button onclick="setVideoUrl()">Set Video</button>
-        <button id="playPauseBtn" onclick="togglePlayPause()">Play</button>
-        <input type="number" id="seekInput" placeholder="Seek to (seconds)" min="0">
-        <button onclick="seekVideo()">Seek</button>
+        <!-- Controls (only visible after joining) -->
+        <div class="controls" id="controlsSection">
+            <!-- Admin-only controls -->
+            <div id="adminControls">
+                <input type="text" id="videoLink" placeholder="Paste YouTube or direct video link (mp4/webm)">
+                <button onclick="setVideoUrl()">Set Video</button>
+                <br>
+                <button id="playPauseBtn" onclick="togglePlayPause()" style="width:120px;">Play</button>
+                <input type="number" id="seekInput" placeholder="Seek to seconds" min="0">
+                <button onclick="seekVideo()">Seek</button>
+            </div>
+            <div id="userInfo">
+                <p id="statusText">Loading room...</p>
+            </div>
+        </div>
     </div>
-    <div id="userInfo">
-        <p id="statusText">Watching...</p>
-    </div>
-</div>
 
-<script type="module">
-    // Import Firebase SDKs
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"; // Use stable version
-    import { getDatabase, ref, onValue, set, update, onDisconnect, runTransaction, serverValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set, onDisconnect, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
-    // Firebase configuration
-    const firebaseConfig = {
-        apiKey: "AIzaSyDnSIfIJpAVF5l5wbw3a3WZ3pLYh8wrnho",
-        authDomain: "nightwithfriends-8db56.firebaseapp.com",
-        databaseURL: "https://nightwithfriends-8db56-default-rtdb.firebaseio.com",
-        projectId: "nightwithfriends-8db56",
-        storageBucket: "nightwithfriends-8db56.appspot.com",
-        messagingSenderId: "173386332528",
-        appId: "1:173386332528:web:bf64a04758a33e72a337b5",
-        measurementId: "G-E8C59QCHNL"
-    };
+        const firebaseConfig = {
+            apiKey: "AIzaSyDnSIfIJpAVF5l5wbw3a3WZ3pLYh8wrnho",
+            authDomain: "nightwithfriends-8db56.firebaseapp.com",
+            databaseURL: "https://nightwithfriends-8db56-default-rtdb.firebaseio.com",
+            projectId: "nightwithfriends-8db56",
+            storageBucket: "nightwithfriends-8db56.appspot.com",
+            messagingSenderId: "173386332528",
+            appId: "1:173386332528:web:bf64a04758a33e72a337b5",
+            measurementId: "G-E8C59QCHNL"
+        };
 
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
-    // Global variables
-    let username = '';
-    let roomId = '';
-    let isAdmin = false;
-    let player = null; // For YouTube
-    let videoElement = null; // For direct video
-    let videoType = ''; // 'youtube' or 'direct'
-    let currentVideoUrl = '';
-    let updateTimer = null;
-    let roomRef = null;
-    let videoUrlRef = null;
-    let videoStatusRef = null;
+        // Global variables
+        let username = '';
+        let roomId = '';
+        let isAdmin = false;
+        let player = null;
+        let videoElement = null;
+        let videoType = '';
+        let currentVideoUrl = '';
+        let updateTimer = null;
+        let videoUrlRef = null;
+        let videoStatusRef = null;
+        let roomRef = null;
 
-    // Functions to check URL type
-    function isYouTubeUrl(url) {
-        return url.includes("youtube.com") || url.includes("youtu.be");
-    }
+        // Read URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        roomId = urlParams.get('room');
+        username = urlParams.get('user') || 'Guest';
 
-    function isDirectVideoUrl(url) {
-        return url.endsWith(".mp4") || url.endsWith(".webm");
-    }
-
-    function getYouTubeId(url) {
-        if (url.includes("youtu.be")) {
-            return url.split("youtu.be/")[1].split("?")[0];
-        } else {
-            return new URL(url).searchParams.get("v");
-        }
-    }
-
-    // Load video based on URL
-    function loadVideo(url) {
-        if (url === currentVideoUrl) return;
-        currentVideoUrl = url;
-        const frame = document.getElementById("videoFrame");
-        frame.innerHTML = "";
-        stopUpdateTimer();
-        player = null;
-        videoElement = null;
-
-        if (!url) {
-            frame.innerHTML = "<p style='color:white;'>No video set</p>";
-            return;
+        if (!roomId) {
+            document.getElementById("videoFrame").innerHTML = `
+                <p style="color:#ff0050;">Error: No room ID provided.<br>
+                Open this link from your app after creating a party.</p>`;
+            document.getElementById("statusText").textContent = "Invalid link";
+            throw new Error("No room ID");
         }
 
-        if (isYouTubeUrl(url)) {
-            videoType = 'youtube';
-            const div = document.createElement("div");
-            div.id = "player";
-            frame.appendChild(div);
-            player = new YT.Player("player", {
-                height: "100%",
-                width: "100%",
-                videoId: getYouTubeId(url),
-                playerVars: {
-                    'autoplay': 0,
-                    'controls': 0 // Hide controls for sync
-                },
-                events: {
-                    'onReady': onPlayerReady
-                }
-            });
-        } else if (isDirectVideoUrl(url)) {
-            videoType = 'direct';
-            videoElement = document.createElement("video");
-            videoElement.src = url;
-            videoElement.controls = false; // Hide controls for sync
-            videoElement.style.width = "90%";
-            videoElement.style.height = "100%";
-            frame.appendChild(videoElement);
-            videoElement.addEventListener('loadedmetadata', onPlayerReady);
-        } else {
-            frame.innerHTML = "<p style='color:white;'>Unsupported video link</p>";
-        }
-    }
-
-    // On player ready, apply initial status
-    function onPlayerReady() {
-        // Sync will be handled by DB listener
-    }
-
-    // Play video
-    function playVideoPlayer() {
-        if (videoType === 'youtube' && player) {
-            player.playVideo();
-        } else if (videoType === 'direct' && videoElement) {
-            videoElement.play();
-        }
-        document.getElementById('playPauseBtn').textContent = 'Pause';
-    }
-
-    // Pause video
-    function pauseVideoPlayer() {
-        if (videoType === 'youtube' && player) {
-            player.pauseVideo();
-        } else if (videoType === 'direct' && videoElement) {
-            videoElement.pause();
-        }
-        document.getElementById('playPauseBtn').textContent = 'Play';
-    }
-
-    // Is playing?
-    function isPlayerPlaying() {
-        if (videoType === 'youtube' && player) {
-            return player.getPlayerState() === YT.PlayerState.PLAYING;
-        } else if (videoType === 'direct' && videoElement) {
-            return !videoElement.paused;
-        }
-        return false;
-    }
-
-    // Get current time
-    function getCurrentTime() {
-        if (videoType === 'youtube' && player) {
-            return player.getCurrentTime();
-        } else if (videoType === 'direct' && videoElement) {
-            return videoElement.currentTime;
-        }
-        return 0;
-    }
-
-    // Seek to time
-    function seekTo(time) {
-        if (videoType === 'youtube' && player) {
-            player.seekTo(time, true);
-        } else if (videoType === 'direct' && videoElement) {
-            videoElement.currentTime = time;
-        }
-    }
-
-    // Start periodic update timer (admin only)
-    function startUpdateTimer() {
-        stopUpdateTimer();
-        updateTimer = setInterval(() => {
-            if (isAdmin) {
-                updatePosition();
-            }
-        }, 3000); // Update every 3 seconds
-    }
-
-    // Stop timer
-    function stopUpdateTimer() {
-        if (updateTimer) {
-            clearInterval(updateTimer);
-            updateTimer = null;
-        }
-    }
-
-    // Update position in DB (admin only)
-    function updatePosition() {
-        set(videoStatusRef.child('currentPosition'), Math.floor(getCurrentTime()));
-    }
-
-    // Set playing in DB (admin only)
-    function setPlaying(playing) {
-        set(videoStatusRef.child('isPlaying'), playing);
-    }
-
-    // Toggle play/pause (admin only)
-    window.togglePlayPause = function() {
-        if (!isAdmin) return;
-        if (isPlayerPlaying()) {
-            pauseVideoPlayer();
-            setPlaying(false);
-            updatePosition();
-            stopUpdateTimer();
-        } else {
-            playVideoPlayer();
-            setPlaying(true);
-            startUpdateTimer();
-        }
-    }
-
-    // Set video URL (admin only)
-    window.setVideoUrl = function() {
-        if (!isAdmin) return;
-        const link = document.getElementById("videoLink").value.trim();
-        if (link) {
-            set(videoUrlRef, link);
-            // Reset status
-            set(videoStatusRef, { isPlaying: false, currentPosition: 0 });
-        }
-    }
-
-    // Seek video (admin only)
-    window.seekVideo = function() {
-        if (!isAdmin) return;
-        const seekTime = parseInt(document.getElementById("seekInput").value);
-        if (!isNaN(seekTime) && seekTime >= 0) {
-            seekTo(seekTime);
-            updatePosition();
-            document.getElementById("seekInput").value = '';
-        }
-    }
-
-    // Join room
-    window.joinRoom = function() {
-        username = document.getElementById("username").value.trim();
-        roomId = document.getElementById("roomId").value.trim();
-
-        if (!username || !roomId) {
-            alert("Please enter username and room ID");
-            return;
-        }
+        // Auto-join the room
+        document.getElementById("statusText").textContent = `Joining room as ${username}...`;
 
         roomRef = ref(db, 'rooms/' + roomId);
         videoUrlRef = ref(db, 'rooms/' + roomId + '/videoUrl');
         videoStatusRef = ref(db, 'rooms/' + roomId + '/videoStatus');
 
-        // Check room exists and set admin
+        // Check if room exists and determine admin status
         onValue(roomRef, (snap) => {
             const data = snap.val();
             if (!data) {
-                alert("Room not found");
+                document.getElementById("videoFrame").innerHTML = "<p style='color:#ff0050;'>Room not found or deleted.</p>";
+                document.getElementById("statusText").textContent = "Room not found";
                 return;
             }
+
             isAdmin = data.admin === username;
             document.getElementById("adminControls").style.display = isAdmin ? 'block' : 'none';
+            document.getElementById("statusText").textContent = isAdmin 
+                ? "You are the host • Full control enabled" 
+                : `Watching with ${username}`;
         }, { onlyOnce: true });
 
-        // Listen for video URL changes
+        // Listen for video URL
         onValue(videoUrlRef, (snap) => {
-            loadVideo(snap.val() || '');
+            const url = snap.val() || '';
+            loadVideo(url);
         });
 
-        // Listen for video status changes
+        // Listen for playback status
         onValue(videoStatusRef, (snap) => {
             const status = snap.val();
             if (!status) return;
 
-            const currTime = getCurrentTime();
-            if (Math.abs(currTime - status.currentPosition) > 1.5) {
+            const currentTime = getCurrentTime();
+            if (Math.abs(currentTime - status.currentPosition) > 2) {
                 seekTo(status.currentPosition);
             }
 
-            if (status.isPlaying && !isPlayerPlaying()) {
+            if (status.isPlaying) {
                 playVideoPlayer();
-            } else if (!status.isPlaying && isPlayerPlaying()) {
+            } else {
                 pauseVideoPlayer();
             }
         });
 
-        // Add user to room
-        const usersRef = ref(db, 'rooms/' + roomId + '/users/' + username);
-        set(usersRef, true);
-        onDisconnect(usersRef).remove();
+        // Add user to room (for presence)
+        const userPresenceRef = ref(db, `rooms/${roomId}/users/${username}`);
+        set(userPresenceRef, true);
+        onDisconnect(userPresenceRef).remove();
 
         // Update user count
-        runTransaction(ref(db, 'rooms/' + roomId + '/userCount'), (current) => (current || 0) + 1);
-        onDisconnect(roomRef).update({ userCount: serverValue.increment(-1) });
+        runTransaction(ref(db, `rooms/${roomId}/userCount`), (current) => (current || 0) + 1);
+        onDisconnect(ref(db, `rooms/${roomId}/userCount`)).runTransaction((current) => (current || 1) - 1);
 
-        // Show controls, hide join
-        document.getElementById("joinSection").style.display = 'none';
+        // Show controls
         document.getElementById("controlsSection").style.display = 'block';
-    }
-</script>
+
+        // Video handling functions
+        function isYouTubeUrl(url) {
+            return /youtube\.com|youtu\.be/.test(url);
+        }
+
+        function isDirectVideoUrl(url) {
+            return /\.(mp4|webm)$/.test(url);
+        }
+
+        function getYouTubeId(url) {
+            if (url.includes("youtu.be")) return url.split("youtu.be/")[1].split("?")[0];
+            return new URL(url).searchParams.get("v");
+        }
+
+        function loadVideo(url) {
+            if (url === currentVideoUrl) return;
+            currentVideoUrl = url;
+
+            const frame = document.getElementById("videoFrame");
+            frame.innerHTML = "";
+            stopUpdateTimer();
+            player = null;
+            videoElement = null;
+
+            if (!url) {
+                frame.innerHTML = "<p style='color:white;'>No video selected yet</p>";
+                return;
+            }
+
+            if (isYouTubeUrl(url)) {
+                videoType = 'youtube';
+                const div = document.createElement("div");
+                div.id = "player";
+                frame.appendChild(div);
+                player = new YT.Player("player", {
+                    videoId: getYouTubeId(url),
+                    playerVars: { controls: 1, autoplay: 0 },
+                    events: { 'onReady': onPlayerReady }
+                });
+            } else if (isDirectVideoUrl(url)) {
+                videoType = 'direct';
+                videoElement = document.createElement("video");
+                videoElement.src = url;
+                videoElement.controls = true;
+                frame.appendChild(videoElement);
+                videoElement.addEventListener('loadedmetadata', onPlayerReady);
+            } else {
+                frame.innerHTML = "<p style='color:white;'>Unsupported link format</p>";
+            }
+        }
+
+        function onPlayerReady() {
+            // Ready for sync
+        }
+
+        function playVideoPlayer() {
+            if (videoType === 'youtube' && player) player.playVideo();
+            else if (videoType === 'direct' && videoElement) videoElement.play();
+            document.getElementById('playPauseBtn').textContent = 'Pause';
+        }
+
+        function pauseVideoPlayer() {
+            if (videoType === 'youtube' && player) player.pauseVideo();
+            else if (videoType === 'direct' && videoElement) videoElement.pause();
+            document.getElementById('playPauseBtn').textContent = 'Play';
+        }
+
+        function isPlayerPlaying() {
+            if (videoType === 'youtube' && player) return player.getPlayerState() === 1;
+            if (videoType === 'direct' && videoElement) return !videoElement.paused;
+            return false;
+        }
+
+        function getCurrentTime() {
+            if (videoType === 'youtube' && player) return player.getCurrentTime();
+            if (videoType === 'direct' && videoElement) return videoElement.currentTime;
+            return 0;
+        }
+
+        function seekTo(time) {
+            if (videoType === 'youtube' && player) player.seekTo(time, true);
+            else if (videoType === 'direct' && videoElement) videoElement.currentTime = time;
+        }
+
+        function startUpdateTimer() {
+            stopUpdateTimer();
+            updateTimer = setInterval(() => {
+                if (isAdmin) {
+                    set(videoStatusRef.child('currentPosition'), Math.floor(getCurrentTime()));
+                }
+            }, 2000);
+        }
+
+        function stopUpdateTimer() {
+            if (updateTimer) clearInterval(updateTimer);
+        }
+
+        // Admin controls
+        window.setVideoUrl = function() {
+            if (!isAdmin) return;
+            const link = document.getElementById("videoLink").value.trim();
+            if (link) {
+                set(videoUrlRef, link);
+                set(videoStatusRef, { isPlaying: false, currentPosition: 0 });
+            }
+        }
+
+        window.togglePlayPause = function() {
+            if (!isAdmin) return;
+            if (isPlayerPlaying()) {
+                pauseVideoPlayer();
+                set(videoStatusRef.child('isPlaying'), false);
+                updatePosition();
+                stopUpdateTimer();
+            } else {
+                playVideoPlayer();
+                set(videoStatusRef.child('isPlaying'), true);
+                startUpdateTimer();
+            }
+        }
+
+        function updatePosition() {
+            set(videoStatusRef.child('currentPosition'), Math.floor(getCurrentTime()));
+        }
+
+        window.seekVideo = function() {
+            if (!isAdmin) return;
+            const time = parseFloat(document.getElementById("seekInput").value);
+            if (!isNaN(time) && time >= 0) {
+                seekTo(time);
+                updatePosition();
+                document.getElementById("seekInput").value = '';
+            }
+        }
+    </script>
 </body>
 </html>
